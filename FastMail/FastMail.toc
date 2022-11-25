@@ -1,0 +1,13 @@
+﻿## Interface: 100002
+## Title: Titan Panel [|cffd6266cFastMail|r]
+## Notes: Shows wether or not you currently have new Mail in your LDB-Display.
+## Author: BloddDragon2580
+## Dependencies: Titan
+## Version: 1.0
+## SavedVariablesPerCharacter: FastMailCounter
+
+embeds.xml
+
+locale\locale.xml
+
+FastMail.lua
