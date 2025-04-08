@@ -1,9 +1,9 @@
-﻿## Interface: 110100
+﻿## Interface: 110105
 ## Title: Titan Panel [|cffd6266cFastMail|r]
 ## Notes: Shows wether or not you currently have new Mail in your LDB-Display.
 ## Author: BloddDragon2580
 ## Dependencies: Titan
-## Version: 7.1
+## Version: 7.2
 ## SavedVariablesPerCharacter: FastMailCounter
 ## IconTexture: Interface\AddOns\FastMail\Media\Texture\logo
 
