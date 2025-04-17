@@ -3,7 +3,7 @@
 ## Notes: Shows wether or not you currently have new Mail in your LDB-Display.
 ## Author: BloddDragon2580
 ## Dependencies: Titan
-## Version: 7.2
+## Version: 7.3
 ## SavedVariablesPerCharacter: FastMailCounter
 ## IconTexture: Interface\AddOns\FastMail\Media\Texture\logo
 
