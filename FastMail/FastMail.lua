@@ -1,154 +1,136 @@
+-- FastMail (The War Within Retail)
+-- TOC:
+-- ## SavedVariables: FastMailCounter
+
 if not LibStub then error("FastMail requires LibStub") end
-local L = LibStub("AceLocale-3.0"):GetLocale("FastMail", false)
+local L    = LibStub("AceLocale-3.0"):GetLocale("FastMail", false)
+local ldb  = LibStub:GetLibrary("LibDataBroker-1.1")
 
-local pName = "FastMail"
-local f = CreateFrame("frame")
-local ldb = LibStub:GetLibrary("LibDataBroker-1.1")
-local files = {
-	iconNoMail = "Interface\\Minimap\\Tracking\\Mailbox",
-	iconNewMail = "Interface\\Minimap\\Tracking\\Mailbox",
-}
-local colors = {
-	["mail_expected"] = "|cff00ff00",
-	["mail_none"] = "|ccccccccc",
-}
-
-local dataobj = ldb:GetDataObjectByName(pName) or ldb:NewDataObject(pName, {
-	type = "data source",
-	text = "FastMail",
-	icon = files["iconNoMail"]
+-- Frame & DataObject
+local f = CreateFrame("Frame")
+local dataobj = ldb:GetDataObjectByName("FastMail") or ldb:NewDataObject("FastMail", {
+    type = "data source",
+    text = "FastMail",
+    icon = "Interface\\Minimap\\Tracking\\Mailbox",
 })
 
-local previousEvent = "none"
+-- Icons
+local icons = {
+    noMail  = "Interface\\Minimap\\Tracking\\Mailbox",
+    newMail = "Interface\\Minimap\\Tracking\\MailNew",
+}
 
-local mailExpected = false
-local mailSenders = {}
-local mailNew = 0
-local mailUnread = 0
-local mailRead = 0
-local mailKnown = 0
-local mailExpectedFromLastThree = 0;
+-- Farben
+local colors = {
+    mailExpected = "|cFF00FF00",
+    mailNone     = "|cFF808080",
+}
 
+-- Mail-Stats
+local mailExpected, mailKnown, mailUnread, mailRead = false, 0, 0, 0
+local mailSenders, mailExpectedFromLastThree = {}, 0
+
+-- SavedVariables initialisieren
+FastMailCounter = FastMailCounter or { mailUnread = 0, mailRead = 0, mailKnown = 0 }
+
+-- Wrapper für Inbox-APIs (Fällt zurück auf alte Globals, wenn C_Mail noch nicht da)
+local function GetInboxCounts()
+    if C_Mail and C_Mail.GetInboxNumItems then
+        return C_Mail.GetInboxNumItems()          -- totalCount, canDeliver
+    else
+        return GetInboxNumItems()                  -- totalCount, totalItems
+    end
+end
+
+local function GetInboxInfo(i)
+    if C_Mail and C_Mail.GetInboxHeaderInfo then
+        return C_Mail.GetInboxHeaderInfo(i)       -- gibt Tabelle mit .sender, .isRead etc.
+    else
+        -- Globale API gibt mehrere Rückgabewerte; wir brauchen nur Sender & wasRead
+        local sender, _, _, _, _, _, _, _, wasRead = GetInboxHeaderInfo(i)
+        return { sender = sender, isRead = wasRead }
+    end
+end
+
+-- Persistenz
+local function saveVars()
+    FastMailCounter.mailUnread = mailUnread
+    FastMailCounter.mailRead   = mailRead
+    FastMailCounter.mailKnown  = mailKnown
+end
+
+-- Tooltip & Broker-Text updaten
+local function updateTooltipAndIcon()
+    if mailExpected then
+        dataobj.text = colors.mailExpected .. L["NEW"] .. "|r"
+        dataobj.icon = icons.newMail
+    elseif mailUnread > 0 then
+        dataobj.text = colors.mailNone .. L["OLD"] .. "|r"
+        dataobj.icon = icons.noMail
+    else
+        dataobj.text = colors.mailNone .. L["NONE"] .. "|r"
+        dataobj.icon = icons.noMail
+    end
+end
+
+-- Haupt-Funktion zum Einlesen der Mail-Daten
+local function UpdateMailData()
+    local total, _ = GetInboxCounts()
+    mailKnown = total or 0
+    mailRead, mailUnread = 0, 0
+
+    for i = 1, mailKnown do
+        local info = GetInboxInfo(i)
+        if info.isRead then mailRead = mailRead + 1
+        else mailUnread = mailUnread + 1 end
+    end
+
+    mailExpected = HasNewMail() and true or false
+    if mailExpected then
+        mailSenders = { GetLatestThreeSenders() }
+        mailExpectedFromLastThree = #mailSenders
+    else
+        mailSenders = {}
+        mailExpectedFromLastThree = 0
+    end
+
+    saveVars()
+    updateTooltipAndIcon()
+end
+
+-- Tooltip-Handler
+function dataobj.OnTooltipShow(tt)
+    if not tt or not tt.AddLine then return end
+
+    if mailExpected and mailExpectedFromLastThree > 0 then
+        tt:AddLine(colors.mailNone .. string.format(L["ATLEAST"], mailExpectedFromLastThree) .. "|r")
+        for i = 1, mailExpectedFromLastThree do
+            local sender = mailSenders[i] or UNKNOWN
+            tt:AddDoubleLine(colors.mailExpected .. sender .. "|r", "")
+        end
+        tt:AddLine(" ")
+    end
+
+    tt:AddDoubleLine(colors.mailNone .. L["KNOWN"] .. "|r", mailKnown)
+    tt:AddDoubleLine(colors.mailNone .. L["UNREAD"] .. "|r", mailUnread)
+    tt:AddDoubleLine(colors.mailNone .. L["READ"] .. "|r", mailRead)
+end
+
+-- Events
 f:RegisterEvent("ADDON_LOADED")
-f:RegisterEvent("PLAYER_ENTERING_WORLD")
+f:RegisterEvent("PLAYER_LOGIN")
 f:RegisterEvent("UPDATE_PENDING_MAIL")
 f:RegisterEvent("MAIL_INBOX_UPDATE")
-f:RegisterEvent("MAIL_SHOW")
-f:RegisterEvent("MAIL_CLOSED")
 
-local function saveVars()
-	_G["FastMailCounter"] = {
-		["mailUnread"] = mailUnread,
-		["mailRead"] = mailRead,
-		["mailKnown"] = mailKnown,
-	}
-end
-
-local function updateTooltip()
-	if mailExpected then
-		dataobj.text = colors["mail_expected"]..L["NEW"]..FONT_COLOR_CODE_CLOSE
-		dataobj.icon = files["iconNewMail"]
-	elseif mailUnread > 0 then
-		dataobj.text = colors["mail_none"]..L["OLD"]..FONT_COLOR_CODE_CLOSE
-		dataobj.icon = files["iconNoMail"]
-	else
-		dataobj.text = colors["mail_none"]..L["NONE"]..FONT_COLOR_CODE_CLOSE
-		dataobj.icon = files["iconNoMail"]
-	end
-end
-
-local function matchSystemMessage(arg1, arg2)
-	arg2 = strsplit("%%s", arg2)
-	return strfind(arg1, arg2)
-end
-
-local function getMailCountFromBlizz()
-	local senders = {GetLatestThreeSenders()}
-	if not senders[1] then
-		return 0
-	end
-	return table.getn(senders)
-end
-
-local function getMailSendersFromBlizz()
-	local senders = {GetLatestThreeSenders()}
-	if not senders[1] then
-		return nil
-	end
-	return senders
-end
-
-local function FastMailInitialize()
-	if HasNewMail() then
-		mailExpected = true
-		mailSenders = getMailSendersFromBlizz()
-		mailExpectedFromLastThree = getMailCountFromBlizz()
-	end
-	if _G["FastMailCounter"] ~= nil then
-		mailUnread = _G["FastMailCounter"]["mailUnread"]
-		mailRead = _G["FastMailCounter"]["mailRead"]
-		mailKnown = _G["FastMailCounter"]["mailKnown"]
-	end
-	updateTooltip()
-end
-
-local function FastMailEvent(event, arg1)
-	if event == "MAIL_SHOW" then
-	elseif event == "MAIL_INBOX_UPDATE" then
-		accurateMailNumbers = true
-		_,totalMailCount = GetInboxNumItems()
-		mailNew = totalMailCount - mailKnown
-		mailExpected = false
-		mailSenders = getMailSendersFromBlizz()
-		mailExpectedFromLastThree = getMailCountFromBlizz() > totalMailCount and getMailCountFromBlizz() or totalMailCount
-	  mailKnown = totalMailCount
-		mailUnread = 0
-		mailRead = 0
-		for i = 1, mailKnown do
-			local _, _, _, _, _, _, _, _, wasRead, _, _, _, _ = GetInboxHeaderInfo(i)
-			if wasRead then
-				mailRead = mailRead + 1
-			else
-				mailUnread = mailUnread + 1
-			end
-		end
-	elseif event == "UPDATE_PENDING_MAIL" then
-		if HasNewMail() then
-			mailExpected = true
-			mailSenders = getMailSendersFromBlizz()
-			mailExpectedFromLastThree = getMailCountFromBlizz()
-		end
-	end
-	saveVars()
-	previousEvent = event
-end
-
-function dataobj.OnTooltipShow(tip)
-	if not tip or not tip.AddLine or not tip.AddDoubleLine then
-		return
-	end
-	if HasNewMail() then
-		local tmpmailcount = getMailCountFromBlizz()
-		if tmpmailcount > 0 then
-			tip:AddDoubleLine(colors["mail_none"]..string.format(L["ATLEAST"], mailExpectedFromLastThree)..FONT_COLOR_CODE_CLOSE)
-			for i=1,tmpmailcount do
-				tip:AddDoubleLine(colors["mail_expected"]..mailSenders[i]..FONT_COLOR_CODE_CLOSE)
-			end
-			tip:AddDoubleLine(" ")
-		end
-	end
-	tip:AddDoubleLine(colors["mail_none"]..L["KNOWN"]..FONT_COLOR_CODE_CLOSE, mailKnown)
-	tip:AddDoubleLine(colors["mail_none"]..L["UNREAD"]..FONT_COLOR_CODE_CLOSE, mailUnread)
-	tip:AddDoubleLine(colors["mail_none"]..L["READ"]..FONT_COLOR_CODE_CLOSE, mailRead)
-
-end
-
-f:SetScript("OnEvent", function(self, event, arg1, ...)
-	if event == "ADDON_LOADED" and arg1 == pName then
-		previousEvent = "ADDON_LOADED"
-		FastMailInitialize()
-	else
-		FastMailEvent(event, arg1)
-	end
-	updateTooltip()
+f:SetScript("OnEvent", function(_, event, arg1)
+    if event == "ADDON_LOADED" and arg1 == "FastMail" then
+        -- Vorsichtig initialisieren
+        mailUnread = FastMailCounter.mailUnread or 0
+        mailRead   = FastMailCounter.mailRead   or 0
+        mailKnown  = FastMailCounter.mailKnown  or 0
+    elseif event == "PLAYER_LOGIN"
+        or event == "UPDATE_PENDING_MAIL"
+        or event == "MAIL_INBOX_UPDATE" then
+        UpdateMailData()
+    end
 end)
