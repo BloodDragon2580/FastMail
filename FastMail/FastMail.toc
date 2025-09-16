@@ -4,7 +4,7 @@
 ## Notes-ruRU: Показывает, есть ли в данный момент новая почта в LDB.
 ## Author: BloddDragon2580
 ## Dependencies: Titan
-## Version: 9.0
+## Version: 9.1
 ## SavedVariablesPerCharacter: FastMailCounter
 ## IconTexture: Interface\AddOns\FastMail\Media\Texture\logo
 
