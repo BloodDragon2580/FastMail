@@ -2,7 +2,7 @@
 ## Title: Titan Panel [|cffd6266cFastMail|r]
 ## Notes: Shows wether or not you currently have new Mail in your LDB-Display.
 ## Notes-ruRU: Показывает, есть ли в данный момент новая почта в LDB.
-## Author: BloddDragon2580
+## Author: BloodDragon2580
 ## Dependencies: Titan
 ## Version: 10.5
 ## SavedVariablesPerCharacter: FastMailCounter
